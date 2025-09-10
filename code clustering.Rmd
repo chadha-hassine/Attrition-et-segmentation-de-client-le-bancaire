@@ -1,0 +1,307 @@
+---
+title: "code clustering"
+
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+Loïc Huang & Chadha Hassine
+MAIN 4
+
+# Analyse factorielle et Clustering
+```{r}
+library(FactoMineR)
+```
+
+```{r} 
+data= read.csv("credit_card_churn.csv")
+data
+```
+
+```{r}
+str(data)
+```
+
+```{r}
+data$Marital_Status = as.factor(data$Marital_Status)
+data$Gender = as.factor(data$Gender)
+data$Education_Level = as.factor(data$Education_Level)
+data$Attrition_Flag = as.factor(data$Attrition_Flag)
+data$Income_Category = as.factor(data$Income_Category)
+data$Card_Category = as.factor(data$Card_Category)
+
+#Suppression colonnes
+data <- subset(data, select = -c(Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_1, Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2, CLIENTNUM))
+
+#Centré réduit
+num_vars <- sapply(data, is.numeric)
+data[, num_vars] <- scale(data[, num_vars])
+```
+
+```{r}
+data
+```
+
+```{r}
+str(data)
+```
+
+# ACP
+
+```{r}
+res_acp=PCA(data, graph=FALSE, , quali.sup=c(1,3,5,6,7,8))
+#png("acp1.png", width = 800, height = 600)
+plot(res_acp, choix="var", axes=c(1,2))
+#plot(res_acp, choix="var", axes=c(3,4))
+#plot(res_acp, choix="var", axes=c(5,1))
+```
+
+Aucune combinaison d'axes permet d'expliquer plus de 50% de la variance donc on va chercher à supprimer des variables qui ont peu de contributions aux axes et ainsi réduire le bruit.
+
+
+```{r}
+res_acp$var$contrib  
+```
+
+```{r}
+rowSums(res_acp$var$contrib)
+```
+
+
+```{r}
+data2 <- subset(data, select = -c(Months_Inactive_12_mon, Contacts_Count_12_mon, Dependent_count, Total_Ct_Chng_Q4_Q1, Total_Amt_Chng_Q4_Q1, Total_Relationship_Count))
+data2
+```
+
+```{r}
+res_acp2=PCA(data2, graph=FALSE, , quali.sup=c(1,3,4,5,6,7))
+#png("acp2.png", width = 800, height = 600)
+plot(res_acp2, choix="var", axes=c(1,2))
+#plot(res_acp2, choix="var", axes=c(3,4))
+#plot(res_acp2, choix="var", axes=c(5,1))
+```
+
+Total_Trans_Ct et Total_Trans_Amt sont corrélés positivement. Les clients qui ont un nombre total de transactions élevés ont également un montant total des transactions élevé.
+Months_on_book et Customer_Age sont corrélés positivement. L'ancienneté d'un client est lié à son âge.
+Credit_Limit et Avg_Open_Tol_Buy sont corrélés positivement. Les clients avec une limite de crédit élevée ont également un montant disponible moyen élevé.
+Total_Trans_Ct et Total_Trans_Amt sont corrélés négativement avec Credit_Limit et Avg_Open_Tol_Buy. Les clients qui un nombre total de transactions élevés et qui ont un montant total de transactions élevé ont une limite de crédit faible et un montant disponible moyen faible.
+Credit_Limit et Avg_Open_Tol_Buy sont corrélés négativement avec Avg_Utilization_Ratio. Les clients qui ont un taux d'utilisation élevé ont tendance à avoir un crédit limite ou un montant disponible moyen faible.
+Total_Revolving_Bal est mal représenté.
+Toutes ces corrélations semblent cohérentes par rapport à l'usage bancaire d'un client.
+
+```{r}
+plot(res_acp2, choix="ind", habillage=1)
+```
+# AFC
+
+
+```{r}
+data_afc <- table(data$Income_Category, data$Education_Level)
+data_afc
+```
+
+```{r}
+res_afc <- CA(data_afc, graph = FALSE)
+#png("afc1.png", width = 800, height = 400)
+plot(res_afc, selectRow="cos2", selectCol="cos2", cex=0.9)
+```
+
+Les personnes qui n'ont pas fait d'études réussissent le mieu avec les revenues les plus haut
+Les doctorants sont aussi proche de ce revenu mais ont pour la plupart un revenu encore inconnu
+Les college et les post-graduate ont des revenues entre 40k et 120k 
+Les niveaux lycées sont autour de 60k et 80k
+Les graduate et les personnes qui n'ont pas indiquées leurs études ont les revenus les plus faibles
+
+```{r}
+data_afc2 <- table(data$Marital_Status, data$Income_Category)
+data_afc2
+```
+
+```{r}
+res_afc2 <- CA(data_afc2, graph = FALSE)
+#png("afc2.png", width = 800, height = 400)
+plot(res_afc2, selectRow="cos2", selectCol="cos2", cex=0.9)
+```
+
+Les clients célibataires ont des revenus de moins de 60k tandis que les personnes mariées ont des revenues plus élevés allant au dela de 60k. 
+
+```{r}
+data_afc3 <- table(data$Marital_Status, data$Education_Level)
+data_afc3
+```
+
+```{r}
+res_afc3 <- CA(data_afc3, graph = FALSE)
+#png("afc3.png", width = 800, height = 400)
+plot(res_afc3, selectRow="cos2", selectCol="cos2", cex=0.9)
+```
+
+Les clients célibataires sont en général des personnes qui sont en doctorate tandis que les personnes mariées ont un niveau d'éducation de graduate
+
+# CLASSIFICATION NON SUPERVISÉE
+
+# CAH
+
+```{r}
+data= read.csv("credit_card_churn.csv")
+data3 <- subset(data, select = -c(Months_Inactive_12_mon, Contacts_Count_12_mon, Dependent_count, Total_Ct_Chng_Q4_Q1, Total_Amt_Chng_Q4_Q1, Total_Relationship_Count,Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_1, Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2, CLIENTNUM))
+
+data3 <- data3[, sapply(data3, is.numeric)]
+data.cr <- scale(data3, center = TRUE, scale = TRUE)
+d.data.cr <- dist(data.cr)
+```
+
+```{r}
+cah.ward <- hclust(d.data.cr, method="ward.D2")
+```
+
+```{r}
+#png("cah1.png", width = 800, height = 400)
+plot(cah.ward, hang=-1) 
+```
+
+```{r}
+#png("cah2.png", width = 800, height = 400)
+barplot(cah.ward$height)
+```
+
+```{r}
+#png("cah3.png", width = 800, height = 400)
+barplot(cah.ward$height[10080:10126])
+```
+
+La perte d'inertie semble faible jusqu'au passage de 5 à 4 classes qui est significative donc on prend k=5, donc on garde 5 classes.
+
+```{r}
+#png("cah4.png", width = 800, height = 400)
+plot(cah.ward, hang =-1,main="ward.D2")
+K=5
+rect.hclust(cah.ward,K)
+```
+
+```{r}
+groupes.cah <- cutree(cah.ward, K)
+```
+
+```{r}
+table(groupes.cah)
+```
+
+```{r}
+for (i in 1:K)
+{ cat("groupe", i,"\n")
+I=which(groupes.cah==i)
+#print(rownames(data)[I]) 
+}
+```
+
+```{r}
+Means_groupes <- matrix(NA, nrow=K, ncol=dim(data3)[2])
+colnames(Means_groupes)=colnames(data3)
+rownames(Means_groupes) =1:K
+for (i in 1:K) Means_groupes[i,]<- colMeans(data3[groupes.cah==i,])
+round(Means_groupes)
+```
+
+```{r}
+aggregate(data3, by=list(groupes.cah), FUN=mean)
+```
+
+
+Interpréation classe
+
+```{r}
+kmeans.result <- kmeans(data.cr,centers=K,nstart=100)
+pairs(data3, col=kmeans.result$cluster )
+```
+
+```{r}
+res=PCA(data3,scale.unit=TRUE, graph=FALSE)
+```
+
+```{r}
+res$eig
+```
+
+```{r}
+plot(res, choix="var")
+```
+
+```{r}
+plot(res, choix="ind")
+
+```
+
+```{r}
+data.Avecclasse = cbind.data.frame(data3, classe = factor(kmeans.result$cluster))
+data.Avecclasse
+```
+
+```{r}
+dim(data.Avecclasse)
+```
+
+```{r}
+res=PCA(data.Avecclasse,scale.unit=TRUE, quali.sup = 9, graph=FALSE)
+plot(res, choix="ind", habillage=9, cex=0.7)
+```
+
+```{r}
+#png("cah5.png", width = 800, height = 600)
+plot(res, choix="ind", habillage=9, cex=0.7, select= "cos2 0.7")
+```
+
+Le groupe 2 correspond aux clients avec Credit_Limit et Avg_Open_Tol_Buy élevés. Ce sont donc des personnes qui une limite de crédit et un montant disponible moyen élevé.
+Le groupe 3 correspond aux clients avec Total_Trans_Ct et Total_Trans_Amt élevé. Ce sont des personnes qui effectuent beaucoup de transactions et avec une utilisation monétaire importante.
+Le groupe 4 correspond aux clients avec Avg_Utilization_Ratio élevé. Ce sont des personnes qui ont tendance à beaucoup utiliser leur compte bancaire pour des achats avec montant élevé ou non.
+Le groupe 1 est l'opposé du groupe 3 avec un nombre de transaction faible et à montant faible.
+Le groupe 1 et 5 correpondent aux client avec Months_on_book et Customer_Age élevé. Ce sont des clients avec une ancienneté importante dans la banque.
+
+# FAMD
+Puisque le graphique des individus en affichant les classes de attrited customer et existed customer est illisible, on va essayer la méthode FAMD
+```{r}
+library(FactoMineR)
+res_md=FAMD(data, graph=FALSE)
+
+```
+
+```{r}
+plot(res_md, choix="quanti")
+
+```
+Par rapport à la PCA , on perd plus d'informations . ici les axes 1 et 2 expliquent 17% des informations. 
+On remarque qu'on a la meme position des variables que celui avec la PCA.
+```{r}
+ res_md$eig
+
+```
+comme vu en TP,par défaut cette méthode garde les ncp =5 premières dimensions.
+
+Je vais maintenant lancer FAMD sur data2 qui contient les variables les plus explicatives .
+
+# FAMD sur data_acp:
+```{r}
+library(FactoMineR)
+res_md2=FAMD(data2, graph=FALSE)
+
+```
+
+```{r}
+plot(res_md2, choix="quanti")
+
+```
+Nous avons obtenu des résultats similaires à ceux de l’ACP
+```{r}
+plot(res_md2, choix="ind", habillage=1)
+```
+
+```{r}
+head(data.Avecclasse)
+res_md_class=FAMD(data.Avecclasse, graph=FALSE)
+plot(res_md_class, choix="quanti")
+```
+
+```{r}
+plot(res_md_class, choix="ind",habillage=9, select = "cos2 0.7")
+```
+On remarque qu'on a presque la meme repartion des groupes que celui obtenu avec la PCA.
