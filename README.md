@@ -1,1 +1,1 @@
-# Attrition-et-segmentation-de-client-le-bancaire
+# Attrition-et-segmentation-de-clientèle-bancaire
