@@ -1,0 +1,768 @@
+---
+title: "Bank churn prediction"
+
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+Loïc Huang & Chadha Hassine
+MAIN 4
+
+# Classification supervisée
+```{r} 
+rm(list=ls())
+
+```
+
+```{r} 
+data_init= read.csv("credit_card_churn.csv")
+```
+
+```{r} 
+
+head(data_init)
+```
+# 1: Prétraitement des données 
+
+# Suppression des variables inutiles :
+Pour cette partie , on va supprimer trois variables inutiles pour la classification:
+
+* " CLIENTNUM ": C’est un identifiant unique, donc il n’a aucune valeur prédictive. Si on le garde, le modèle pourrait apprendre par cœur l’ID au lieu de généraliser.
+
+* "Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_1 " et " Naive_Bayes_Classifier_Attrition_Flag_Card_Category_Contacts_Count_12_mon_Dependent_count_Education_Level_Months_Inactive_12_mon_2 " : Ce sont des probabilités générées par le modèle (Naive Bayes). Si on les gardes, c’est comme si on donnais déjà la réponse au modèle et cela fausserait donc sa performance .
+
+```{r} 
+data <- data_init[, -c(1, 22, 23)]
+
+```
+# Vérification des valeurs manquantes
+```{r} 
+# Vérification des valeurs manquantes
+cat("Nombre total de NA dans le jeu de données :", sum(is.na(data)), "\n")
+# Vérification des 'Unknown'
+cat("\nNombre de valeurs 'Unknown' par variable :\n")
+sapply(data, function(x) sum(x == "Unknown"))
+```
+
+Certaines variables catégorielles, comme Education_Level, Income_Category ou Marital_Status, contiennent des modalités "Unknown".
+Plutôt que de les traiter comme des données manquantes (NA), nous avons choisi de les conserver comme une modalité à part entière.
+En effet, le fait de ne pas déclarer une information peut être un indicateur de comportement client spécifique (ex. méfiance, manque d'engagement...), et peut donc avoir une valeur prédictive dans le cadre de notre classification supervisée.
+
+# Conversion en facteur des variables qualitatives :
+```{r} 
+data$Gender <- as.factor(data$Gender)
+data$Education_Level <- as.factor(data$Education_Level)
+data$Marital_Status <- as.factor(data$Marital_Status)
+data$Income_Category <- as.factor(data$Income_Category)
+data$Card_Category <- as.factor(data$Card_Category)
+data$Attrition_Flag <- as.factor(data$Attrition_Flag)
+```
+
+```{r} 
+str(data)
+```
+```{r} 
+ summary(data)
+```
+
+```{r} 
+ attach(data)
+```
+# Étude des proportions des variables qualitatives :
+on vérifie si le jeu de données est équilibré ou déséquilibré, ce qui peut influencer le choix du modèle ou la nécessité d’appliquer des techniques de rééchantillonnage (comme SMOTE).
+```{r} 
+var_quali <- c("Attrition_Flag","Gender", "Education_Level", "Marital_Status", "Income_Category", "Card_Category")
+
+# Affichage des proportions pour chaque variable
+for (var in var_quali) {
+  cat("\nRépartition en (%) pour", var, ":\n")
+  print(prop.table(table(data[[var]])) * 100)
+}
+
+```
+La variable Attrition_Flag est fortement déséquilibrée, avec environ 84 % de clients fidèles et seulement 16 % de clients partis (churn).
+
+Certaines variables présentent également un déséquilibre fort, comme :Card_Category , Income_Category , Education_Level et Marital_Status .
+
+La variable Gender est plutôt équilibrée
+
+# 2.Prédiction du départ des clients (churn) 
+Dans cette partie , on va prédire si un client va quitter la banque ou non. La variable cible est Attrition_Flag 
+
+# Statistiques descriptives :
+
+# a. Nombre total de transactions
+```{r} 
+boxplot(Total_Trans_Ct ~ Attrition_Flag, data = data,
+          main = "Transactions totales par statut d'attrition",
+          col = c("orange", "green"))
+
+
+```
+
+Les clients churnés ("Attrited Customer") ont un nombre médian de transactions bien plus faible que les clients restants.
+ Le manque d'activité transactionnelle est donc un facteur fort de churn. Ce sera une variable très importante pour les modèles.
+ 
+# b.Taux d’utilisation moyen du crédit 
+```{r} 
+
+boxplot(Avg_Utilization_Ratio ~ Attrition_Flag, data = data,
+        main = "Taux d'utilisation par statut d'attrition",
+        col = c("orange", "lightblue"))
+
+```
+
+On remarque que les clients churnés ont un taux d'utilisation du crédit très bas, souvent proche de 0. Par contre, les clients restants utilisent davantage leur crédit, avec une distribution beaucoup plus étalée.
+
+Un client qui n'utilise presque pas son crédit semble moins engagé, et donc plus susceptible de quitter la banque.
+
+Cette variable reflète donc l’intensité d’usage du produit bancaire.
+
+# Comparaison des variables numériques par statut d'attrition
+```{r} 
+# Charger les bons packages
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+
+# Sélection des variables numériques à comparer
+vars <- c("Total_Trans_Ct", "Total_Trans_Amt", "Avg_Utilization_Ratio",
+          "Total_Relationship_Count", "Contacts_Count_12_mon",
+          "Credit_Limit", "Total_Revolving_Bal")
+
+# Subset et pivot long
+data_selected <- data %>%
+  select(Attrition_Flag, all_of(vars)) %>%
+  pivot_longer(cols = -Attrition_Flag, names_to = "Variable", values_to = "Valeur")
+
+# Graphe en facettes
+ggplot(data_selected, aes(x = Attrition_Flag, y = Valeur, fill = Attrition_Flag)) +
+  geom_boxplot(outlier.size = 0.5) +
+  facet_wrap(~ Variable, scales = "free", ncol = 3) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        strip.text = element_text(size = 10, face = "bold"),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Comparaison des variables numériques par statut d'attrition",
+       x = "", y = "")
+
+
+```
+
+# Répartition des clients selon les variables qualitatives
+```{r} 
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# variables qualitatives
+vars_cat <- c("Gender", "Education_Level", "Marital_Status",
+              "Income_Category", "Card_Category")
+
+# Boucle pour générer les barplots
+for (var in vars_cat) {
+  p <- ggplot(data, aes_string(x = var, fill = "Attrition_Flag")) +
+    geom_bar(position = "fill") +  # proportion dans chaque modalité
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(title = paste("Répartition de", var, "selon le statut d'attrition"),
+         y = "Proportion", x = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          plot.title = element_text(size = 12, face = "bold"))
+  
+  print(p)
+}
+
+```
+
+```{r}
+
+data_long_cat <- data %>%
+  select(Attrition_Flag, all_of(vars_cat)) %>%
+  pivot_longer(cols = -Attrition_Flag, names_to = "Variable", values_to = "Valeur")
+
+ggplot(data_long_cat, aes(x = Valeur, fill = Attrition_Flag)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ Variable, scales = "free", ncol = 2) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Répartition des clients selon les variables qualitatives",
+       x = "", y = "Proportion") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(size = 13, face = "bold"),
+        legend.title = element_blank())
+```
+# Répartition des modalités par statut d'attrition
+```{r} 
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+
+# Liste des variables qualitatives à représenter
+qual_vars <- c("Card_Category", "Education_Level", "Gender", "Income_Category", "Marital_Status")
+
+# Boucle sur chaque variable qualitative
+for (var in qual_vars) {
+  ggplot(data, aes_string(x = "Attrition_Flag", fill = var)) +
+    geom_bar(position = "fill") +
+    scale_y_continuous(labels = scales::percent_format()) +
+    labs(
+      title = paste("Répartition de", var, "par statut d'attrition"),
+      x = "Statut d'attrition",
+      y = "Proportion",
+      fill = var
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) -> p
+
+  print(p)
+}
+
+
+```
+
+```{r} 
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+# Variables qualitatives à analyser
+qual_vars <- c("Card_Category", "Education_Level", "Gender", "Income_Category", "Marital_Status")
+
+# Mise en forme des données (passage en format long)
+data_long <- data %>%
+  select(Attrition_Flag, all_of(qual_vars)) %>%
+  pivot_longer(cols = -Attrition_Flag, names_to = "Variable", values_to = "Modalité")
+
+# Graphe combiné
+ggplot(data_long, aes(x = Attrition_Flag, fill = Modalité)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ Variable, scales = "free_y") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    title = "Répartition des modalités par statut d'attrition",
+    x = "Statut d'attrition",
+    y = "Proportion",
+    fill = "Modalité"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+# Relations entre les variables numériques 
+```{r}
+
+# Sélection des variables numériques
+#data_num <- data[, sapply(data, is.numeric)]
+
+#pairs(data_num)
+
+```
+Ce graphe est illisible .
+
+# Création d'un échantillion test et train
+
+```{r} 
+ set.seed(1)
+ n <- nrow(data)
+ p <- ncol(data)-1
+ test.ratio <- .2 # ratio of test/train samples
+ n.test <- round(n*test.ratio)
+ n.test
+ tr <- sample(1:n,n.test)
+ data.test <- data[tr,]
+ data.train <- data[-tr,]
+ 
+```
+
+# Random Forest sans équilibrage de données :
+
+Dans cette partie , je veux entrainer mon jeu de données sans l'équilibrer 
+
+```{r} 
+ library(randomForest)
+```
+
+```{r} 
+fit_RF_sans_qulibrage <- randomForest(Attrition_Flag~.,data.train)
+fit_RF_sans_qulibrage
+
+```
+On remarque que l'erreur de la classe Attrited Customer (classe minoritaire)  est beaucoup plus élevée que celle de la classe majoritaire (rouge), ce qui est normal avec un dataset déséquilibré.
+
+```{r} 
+plot(fit_RF_sans_qulibrage)
+
+```
+* courbe Noir : erreur globale (out-of-bag)
+
+* courbe Rouge : erreur pour la classe "Attrited Customer" (clients churnés)
+
+* courbe Vert : erreur pour la classe "Existing Customer" (clients fidèles)
+
+La courbe rouge est très haute (~17 %), bien plus élevée que la courbe verte (~2 %).
+Cela signifie que le modèle prédit très bien les clients fidèles, mais se trompe souvent sur les churners.
+
+# Prédiction avec Random Forest
+```{r} 
+ class_RF_sans_equlibrage= predict(fit_RF_sans_qulibrage, newdata=data.test, type="class")
+
+```
+
+# Table confusion de Random Forest
+```{r} 
+#table(data.test$Attrition_Flag)
+
+```
+
+```{r} 
+ confusion__sans_equlibrage = table(class_RF_sans_equlibrage, data.test$Attrition_Flag)
+ confusion__sans_equlibrage
+```
+# Accuracy de Random Forest
+```{r} 
+accuracy_RF = mean(class_RF_sans_equlibrage == data.test$Attrition_Flag)
+ accuracy_RF
+```
+# Erreur pour les deux classes
+
+```{r} 
+ confusion__sans_equlibrage[1,2]/sum(confusion__sans_equlibrage[,2])
+```
+
+```{r} 
+# erreur class Attrited Customer
+ confusion__sans_equlibrage[2,1]/sum(confusion__sans_equlibrage[,1])
+```
+ 
+Globalement très bonne accuracy avec peu d’erreurs mais beaucoup d’erreur pour classe Attrited Customer . 
+Cette différence met en évidence un biais du modèle en faveur de la classe Existing Customer, lié au déséquilibre initial du jeu de données.
+
+Cela justifie donc l’utilisation d’un rééquilibrage tel que SMOTE pour obtenir un modèle plus juste et efficace.
+
+# On ré-équilibre le jeu d’apprentissage
+
+```{r} 
+ library(DMwR)
+
+```
+
+```{r} 
+ data.train.balanced <- SMOTE(Attrition_Flag ~., data.train)
+ table(data.train.balanced$Attrition_Flag)
+```
+A partir de cette étape , on va entrainer les modèles que sur la base de données réequilibrées qui est data.train.balanced
+
+# Random Forest sur les données réequilibrées : 
+
+```{r} 
+
+ fit_RF <- randomForest(Attrition_Flag~.,data.train.balanced)
+ fit_RF
+```
+
+Après rééquilibrage avec SMOTE, le modèle Random Forest atteint une excellente performance, avec un taux d'erreur global de seulement 2,05 %, et des taux d'erreur très faibles et équilibrés pour les deux classes : 2,3 % pour les churners et 1,85 % pour les clients fidèles, ce qui montre que le modèle apprend désormais à bien distinguer les deux groupes.
+
+```{r} 
+ plot(fit_RF)
+
+```
+
+Interprétation des courbes:
+* Noir : erreur globale (OOB = out-of-bag)
+
+* Vert : erreur pour la classe "Existing Customer"
+
+* Rouge : erreur pour la classe "Attrited Customer"
+
+Grâce au rééquilibrage, l’erreur pour la classe minoritaire (clients churnés) est maintenant plus basse et proche de celle de la classe majoritaire, ce qui signifie que le modèle est devenu plus équilibré dans sa capacité à bien prédire les deux classes.
+
+# Prédiction :
+
+```{r} 
+pred_RF <- predict(fit_RF,newdata=data.test, type="prob")
+
+```
+
+
+```{r} 
+ class_RF= predict(fit_RF, newdata=data.test, type="class")
+
+```
+
+# Evaluer le modèle Random Forest sur les données réequilibrées: 
+# Table confusion
+
+```{r} 
+ table(class_RF, data.test$Attrition_Flag)
+```
+# Accuracy
+```{r} 
+accuracy_RF = mean(class_RF == data.test$Attrition_Flag)
+ accuracy_RF
+``` 
+
+# Courbe sous ROC:
+```{r} 
+ library(pROC)
+```
+
+```{r} 
+ pred_RF = predict(fit_RF, data.test, type="prob")[,2]
+ ROC_RF <- roc(data.test$Attrition_Flag, pred_RF)
+ ROC_RF$auc
+```
+
+# Importance des variables avec random forest
+```{r} 
+var.imp = fit_RF$importance
+var.imp
+```
+
+```{r} 
+barplot(t(var.imp), las=3) #las=3 pour avoir les noms en vertical
+```
+
+```{r} 
+#ou pour avoir les variables ordonnées :
+ord=order(var.imp, decreasing = TRUE)
+barplot(var.imp[ord], names.arg=rownames(var.imp)[ord], las=3)
+```
+
+L’analyse de l’importance des variables dans le modèle Random Forest montre que l’activité transactionnelle est le facteur prédictif principal du churn.
+En particulier, le nombre total de transactions est la variable la plus déterminante, suivie du montant des transactions et de l’évolution du comportement d’achat (T4/T1).
+À l’inverse, les caractéristiques sociodémographiques comme le Gender, le revenu ou la situation matrimoniale apparaissent comme faiblement discriminantes, ce qui suggère que le comportement prime sur le profil pour prédire le départ des clients.
+
+# CART (Classification and Regression Trees)
+```{r} 
+library(rpart)
+library(rpart.plot)
+```
+
+```{r} 
+arbre=rpart(Attrition_Flag~.,data.train.balanced)
+print(arbre)
+```
+
+# Choisir l'arbre optimal 
+```{r} 
+set.seed(1)
+cp.opt <- arbre$cptable[which.min(arbre$cptable[, "xerror"]), "CP"]
+cp.opt
+```
+
+```{r} 
+arbre.opt <- prune(arbre,cp=cp.opt)
+rpart.plot(arbre.opt, type=4)
+```
+
+# prédiction 
+```{r} 
+pred= predict(arbre.opt, newdata=data.test, type="prob")
+
+```
+
+```{r} 
+class_cart= predict(arbre.opt, newdata=data.test, type="class")
+
+```
+
+# Evaluer le modèle :
+
+# table de confusion avec CART
+
+```{r} 
+table (class_cart,data.test$Attrition_Flag)
+```
+Le modèle manque 142 churners, soit environ 33 % des départs.
+Seulement 50 clients fidèles sont mal classés comme churners, ce qui reste acceptable.
+# accuracy
+
+```{r} 
+accuracy_cart=mean(class_cart==data.test$Attrition_Flag)
+accuracy_cart
+```
+Cela signifie que le modèle CART a correctement prédit 90 % des cas sur les données de test.
+# aire sous courbe roc
+```{r} 
+ pred_cart=predict(arbre.opt,data.test,type="prob")[,2]
+ ROC_cart<-roc(data.test$Attrition_Flag,pred_cart)
+```
+
+```{r} 
+ROC_cart
+```
+
+# variable d'importance avec CART
+```{r} 
+arbre.opt$variable.importance
+```
+
+```{r} 
+barplot(arbre.opt$variable.importance, las=3)
+```
+# ADABOOST:
+Pour ce type d’algo, la variable Attrition_Flag  doit être codée numeriquement avec des valeurs valant 0 ou 1.
+
+```{r} 
+ library(gbm)
+
+```
+# Ababoost suu 100 arbres:
+```{r} 
+ fit.adaboost1=gbm(as.numeric(Attrition_Flag )-1 ~., data.train.balanced, distribution = "adaboost")
+fit.adaboost1
+```
+ Par défaut, les weak learners sont des souches ( interaction.depth = 1), n.trees = 100 (=B) arbres sont
+ itérés,
+
+```{r} 
+ pred_adaboost1 = predict(fit.adaboost1, newdata=data.test, type = "response")
+
+```
+
+```{r} 
+class_adaboost1 <- ifelse(pred_adaboost1 > 0.5, "Existing Customer", "Attrited Customer")
+class_adaboost1 <- factor(class_adaboost1, levels = levels(data.test$Attrition_Flag))
+
+```
+
+```{r} 
+ table(class_adaboost1, data.test$Attrition_Flag)
+
+```
+
+```{r}
+accuracy_adaboost1 = mean(class_adaboost1 == data.test$Attrition_Flag)
+ accuracy_adaboost1
+```
+# parameter n.trees(B) et λ par cross validation
+
+Une façon de calibrer ces paramètres est de prendre λ petit et de calibrer le nombre d’itérations par cross-validation 5 folds pour la perte exponentielle.
+
+```{r} 
+fit.adaboost=gbm(as.numeric(Attrition_Flag )-1 ~., data.train.balanced, distribution = "adaboost",cv.folds = 5, shrinkage = 0.01,n.trees=3000)
+ gbm.perf(fit.adaboost)
+```
+
+```{r} 
+levels(data.train.balanced$Attrition_Flag)
+ B.opt = gbm.perf(fit.adaboost, method="cv")
+
+```
+
+ En noir, on a la perte pour le jeu “donnees”, et en vert la perte estimée par validation croisée (c’est l’erreur de généralisation). Ici les deux courbes se supperposent . j'ai essayé avec un cv.folds=10 et n.trees=12000 mais j'ai presque la meme chose.
+
+# Prédire sur échantillon test avec B opt
+```{r} 
+ pred_adaboost = predict(fit.adaboost, newdata=data.test, type = "response", n.trees = B.opt)
+class_adaboost <- ifelse(pred_adaboost > 0.5, "Existing Customer", "Attrited Customer")
+class_adaboost <- factor(class_adaboost, levels = levels(data.test$Attrition_Flag))
+
+```
+
+# Evaluation du modèle Adaboost
+
+# Table confusion et accuracy de Adaboost:
+```{r} 
+ table(class_adaboost, data.test$Attrition_Flag)
+
+```
+
+```{r} 
+
+accuracy_adaboost = mean(class_adaboost == data.test$Attrition_Flag)
+ accuracy_adaboost
+```
+
+# aire sous courbe ROC 
+```{r} 
+ library(pROC)
+```
+
+```{r} 
+ROC_adaboost <- roc(data.test$Attrition_Flag, pred_adaboost)
+ROC_adaboost$auc
+
+```
+# Les variables importantes avec Adaboost:
+
+```{r} 
+ var.imp = summary(fit.adaboost)
+
+```
+
+```{r} 
+var.imp
+```
+
+L’analyse de l’importance des variables dans le modèle AdaBoost montre une forte prédominance des variables comportementales (transactions, solde, activité récente).
+
+En particulier, le nombre total de transactions est de loin la variable la plus influente (40,5 %), confirmant qu’un client actif est moins susceptible de quitter la banque.
+
+À l’inverse, les variables démographiques comme le Gender ou le niveau d’études n’apportent quasiment aucune valeur discriminante pour ce modèle.
+
+
+# Régression logistique Lasso
+
+glmnet ne fonctionne qu’avec des variables explicatives quantitatives. Si vous avez des variables qualitatives. il faut donc transformer la variable Attrition_Flag en dummy.
+```{r} 
+ library(glmnet)
+```
+
+# choix de lambda par cross-validation avec la commande cv.glmnet
+
+```{r} 
+X <- model.matrix(Attrition_Flag ~ ., data.train.balanced)[, -1]  
+y <- data.train.balanced$Attrition_Flag
+
+cvLasso <- cv.glmnet(X, y, family = "binomial", type.measure = "class")
+plot(cvLasso)
+```
+# Prédiction
+```{r} 
+X_test <- model.matrix(Attrition_Flag ~ ., data.test)[, -1]  
+class_logit_lasso <- predict(cvLasso, newx = X_test, s = "lambda.min", type = "class")
+```
+
+# Evaluer le modèle de la régression Lasso
+
+# table de confusion
+```{r} 
+ table(class_logit_lasso,data.test$Attrition_Flag)
+
+```
+# accuracy
+```{r} 
+ accuracy_logit_lasso=mean(class_logit_lasso==data.test$Attrition_Flag)
+ accuracy_logit_lasso
+```
+# Aire sous courbe ROC
+```{r} 
+X_test = model.matrix(Attrition_Flag ~ ., data.test)[, -1]
+y_test <- factor(data.test$Attrition_Flag, levels = c("Attrited Customer", "Existing Customer"))
+
+pred_logit_lasso = predict(cvLasso, newx = X_test, s = "lambda.min", type = "response")
+
+library(pROC)
+ROC_logit_lasso = roc(y_test, as.vector(pred_logit_lasso))
+plot(ROC_logit_lasso, col = "blue")
+auc(ROC_logit_lasso)
+
+```
+
+```{r} 
+ ROC_logit_lasso$auc
+
+```
+
+# Variable signficative 
+```{r} 
+coef_lasso <- coef(cvLasso, s = "lambda.min")
+
+```
+
+```{r} 
+# Extraire les noms des variables avec des coefficients ≠ 0
+signif_vars <- coef_lasso[coef_lasso[, 1] != 0, ]
+signif_vars
+
+
+```
+
+les variables significatives données par la régression lasso ne sont pas les memes obtenues avec les autres modèles .
+Je vais confirmer avec la régression logistique clasique et comparer.
+
+# Régression logistique
+```{r} 
+ logit.train <- glm(Attrition_Flag ~ ., family = binomial , data=data.train.balanced)
+ logit.train.AIC <- step(logit.train) #backward par defaut
+```
+# OR 
+```{r} 
+ exp(logit.train$coefficients)
+
+```
+# Contribution individuelle : test de Wald
+```{r} 
+summary(logit.train)
+
+```
+On remarque l'existance des variables explicatives comme GenderM, Card_CategoryGold, Marital_StatusMarried qui ne sont pas importantes dans notre prédiction du churn.                   
+En effet, la régression logistique et le Lasso sélectionnent des variables explicatives sur la base de leur effet linéaire et indépendant.
+Cependant, ces modèles ne tiennent pas compte des interactions complexes entre variables, ce qui peut expliquer pourquoi certaines variables très discriminantes dans des modèles non linéaires (comme Random Forest ou AdaBoost) apparaissent comme moins importantes ou non significatives ici.
+
+# Selection du  modèle
+```{r} 
+ library(MASS)
+ res_AIC <- step(logit.train) #backward par defaut
+```
+
+```{r} 
+summary(res_AIC)
+```
+# Prédictions :
+```{r} 
+ pred_logit <- predict(logit.train.AIC, data.test, type="response")
+
+```
+
+```{r} 
+ class_logit <- ifelse(pred_logit > 0.5, "Existing Customer", "Attrited Customer")
+class_logit <- factor(class_logit, levels = levels(data.test$Attrition_Flag))
+
+```
+# Evaluer le modèle de la régression logistique
+```{r} 
+confusion = table(class_logit, data.test$Attrition_Flag)
+```
+
+```{r} 
+accuracy_logit = mean(class_logit == data.test$Attrition_Flag)
+ accuracy_logit
+```
+
+```{r} 
+ROC_logit <- roc(data.test$Attrition_Flag, pred_logit)
+ROC_logit$auc
+
+```
+# Comparer les méthodes:
+
+```{r} 
+result <- matrix(NA, ncol = 5, nrow = 2)
+rownames(result) <- c("accuracy", "AUC")
+colnames(result) <- c("cart", "RF", "adaboost", "logit_lasso" , "logit")
+
+result[1, ] <- c(accuracy_cart, accuracy_RF, accuracy_adaboost, accuracy_logit_lasso ,accuracy_logit)
+result[2, ] <- c(ROC_cart$auc, ROC_RF$auc, ROC_adaboost$auc, ROC_logit_lasso$auc,ROC_logit$auc)
+
+result
+```
+
+```{r} 
+apply(result,1, which.max )
+```
+le modèle le plus performant est Random forest
+```{r} 
+plot(ROC_cart, col = 1, main = "Courbes ROC comparées")
+
+plot(ROC_RF, add = TRUE, col = 2)
+plot(ROC_adaboost, add = TRUE, col = 3)
+plot(ROC_logit_lasso, add = TRUE, col = 4)
+plot(ROC_logit, add = TRUE, col = 5)
+
+legend("bottomright", legend = c("cart", "RF", "adaboost", "logit_lasso", "logit"),col = 1:5,lwd = 2)
+```
+
+L'analyse des courbes ROC montre clairement que les modèles Random Forest et AdaBoost obtiennent les meilleures performances prédictives, avec des courbes très proches du coin supérieur gauche.
+
+À l’inverse, les modèles linéaires comme la régression logistique et le Lasso obtiennent des résultats plus modestes, notamment en raison de leur incapacité à modéliser les relations non linéaires.
+
+
