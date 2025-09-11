@@ -14,7 +14,7 @@ Ce projet vise à analyser les comportements clients afin de **détecter ceux su
 - Variables : données socio-démographiques, financières et comportementales  
 - Taille : environ **10 000 clients**  
 
-## 🛠 Méthodologie  
+## Méthodologie  
 
 ###  Analyse exploratoire des données (EDA)  
 - Nettoyage et préparation : suppression des variables inutiles, gestion des valeurs inconnues  
@@ -39,7 +39,7 @@ Ce projet vise à analyser les comportements clients afin de **détecter ceux su
 - Indicateurs : **Accuracy**, **AUC-ROC**, **matrice de confusion**  
 - Comparaison des performances entre modèles  
 
-## 🛠 Outils utilisés  
+## Outils utilisés  
 - **Langage** : R  
 - **Packages principaux** :  
   - `tidyverse` (manipulation et visualisation : dplyr, tidyr, ggplot2)  
