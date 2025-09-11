@@ -20,43 +20,31 @@ Variables disponibles : informations socio-démographiques, financières et comp
 
 Taille : ~10 000 clients.
 
-# Méthodologie
+## 🛠️ Méthodologie  
 
-Analyse exploratoire des données (EDA)
+### 🔍 Analyse exploratoire des données (EDA)  
+- Nettoyage et préparation : suppression des variables inutiles, gestion des valeurs inconnues  
+- Statistiques descriptives et visualisations  
 
-Nettoyage et préparation (suppression variables inutiles, gestion des valeurs inconnues).
+### 📊 Méthodes factorielles  
+- **ACP (Analyse en Composantes Principales)** : étude des corrélations entre variables quantitatives  
+- **AFC (Analyse Factorielle des Correspondances)** : analyse des relations entre variables qualitatives  
 
-Statistiques descriptives et visualisations.
+### 🧩 Classification non supervisée  
+- **Clustering hiérarchique (CAH)** pour regrouper les clients en profils homogènes  
 
-Méthodes factorielles
+### 🤖 Classification supervisée  
+- Données fortement déséquilibrées → **rééchantillonnage avec SMOTE**  
+- Modèles testés :  
+  - Régression logistique & Lasso  
+  - Arbre de décision (CART)  
+  - Random Forest  
+  - AdaBoost  
 
-ACP (Analyse en Composantes Principales) pour étudier les corrélations entre variables quantitatives.
+### 📈 Évaluation des performances  
+- Indicateurs : **Accuracy**, **AUC-ROC**, **matrice de confusion**  
+- Comparaison des performances entre modèles  
 
-AFC (Analyse Factorielle des Correspondances) pour les variables qualitatives.
-
-Classification non supervisée
-
-Clustering hiérarchique (CAH) pour regrouper les clients en profils.
-
-Classification supervisée
-
-Données fortement déséquilibrées → rééchantillonnage avec SMOTE.
-
-Modèles testés :
-
-Régression logistique & Lasso
-
-Arbre de décision (CART)
-
-Random Forest
-
-AdaBoost
-
-Évaluation des performances
-
-Metrics : Accuracy, AUC-ROC, matrice de confusion.
-
-Comparaison entre modèles.
 
 # Outils utilisés
 
